@@ -25,6 +25,7 @@ library(patchwork)
 library(ggpubr)
 library(cowplot)
 library(HDInterval)
+library(ggridges)
 ```
 ## Importing data 
 ```
@@ -109,15 +110,19 @@ abund_2 <-  abund_1 %>%
   select(-c(`TRAP MALFUNCTION`, `TRAP DISTURBANCE`)) %>%                               ##remove oberservations recorded as 'TRAP MALFUNCTION' or 'TRAP DISTURBANCE' 
   mutate(total = rowSums(.[2:8]),                                                      ##get the sum of rows for rows 2:8 
          perc_rbv = RBV/total)                                                         ##divide the number of red backed voles by the total number of animals to get the                                                                                                ##percentage of red backed voles (perc_rbv) within the small mammal community
+         
+              
+                                                     
+
+
 temp1 <- separate(abund_2, group_ID, c("year","month","trapline.no"))%>%               ##separate group_ID into 'year','month', and 'trapline number'
-  filter(year=="2016"|year=="2017")                                                    ##subset observations from years 2016 and 2017 
-temp1 <- summarise_all(temp1[4:14],funs(sum))/715; temp1 
+  filter(year=="2016"|year=="2017")                                                    ##subset observations from years 2016 and 2017
+summarise_all(temp1[4:14],funs(sum))/sum(temp1[14])                                    ##summary of community composition 
 
-temp2 <- separate(abund_2, group_ID, c("year","month","trapline.no"))%>% 
+temp2 <- separate(abund_2, group_ID, c("year","month","trapline.no"))%>%               ##see description above ^
   filter(year=="2018"|year=="2020")
-temp2 <- summarise_all(temp2[4:14],funs(sum))/652; temp2 
+summarise_all(temp2[4:14],funs(sum))/sum(temp2[14])
 
-aggregate(temp2[4:14], by=list(Category=temp2$trapline.no), FUN=sum)
 
 ##### need to combine the abund_2 dataframe with previous data frame 
 #### so that the model OrangeMites ~ species*rbc_perc can be run 
@@ -131,3 +136,138 @@ orangemitedata_v3 <- orangemitedata_v2 %>%
   #join 'abund_2' dataframe to 'orangemitedata_v3' dataframe by the group_ID column 
   #so that the percentage of voles within a community (per month) can be recorded for each observation 
   left_join(abund_2[,c(1,13)], by="group_ID")
+  ``` 
+  # Community composition 1 (High red backed vole year) model 
+  ### Priors
+  ``` 
+p4 <- get_prior(OrangeMites~Species+Trapline+Year+date.julian+Species:Trapline+Species:date.julian+(1|TagLeft), 
+                family=bernoulli(), 
+                data=orangemitedata_v2[!orangemitedata_v2$Trapline==9,][c(3,4,8,10,13,14)] %>% 
+                  subset(Year == 1 | Year == 2));p4
+p4 <- c(set_prior("normal(0,100)", class="b", coef="Species1"), 
+        set_prior("normal(0,100)", class="b", coef="Species3"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline1"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline2"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline3"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline5"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline7"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline8"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline1"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline2"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline3"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline5"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline7"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline8"),
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline1"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline2"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline3"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline5"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline7"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline8"), 
+        set_prior("normal(0,100)", class="b", coef="date.julian"),
+        set_prior("normal(0,100)", class="b", coef="Species1:date.julian"),
+        set_prior("normal(0,100)", class="b", coef="Species3:date.julian"), 
+        set_prior("normal(0,100)", class="b", coef="Year2"));p4
+``` 
+### Model 1 (High red backed vole year)
+``` 
+comm.comp1 <- brm(OrangeMites~Species+Trapline+Year+date.julian+Species:Trapline+Species:date.julian+(1|TagLeft), 
+                  data=na.omit(orangemitedata_v2[!orangemitedata_v2$Trapline==9,][c(3,4,8,10,13,14)]) %>% 
+                    subset(Year == 1 | Year == 2), 
+                  family=bernoulli(),
+                  prior = p4,
+                  warmup = 4000,
+                  iter =8000, 
+                  seed=123,
+                  thin=2,
+                  chains = 4,
+                  cores = 2, 
+                  save_all_pars=T, 
+                  control = list(adapt_delta=0.99, max_treedepth=15))
+saveRDS(comm.comp1, "comm_comp1.RDS")                                               ## save model 
+comm.comp1<- readRDS("comm_comp1.RDS")                                              ## load model for future use 
+``` 
+# Community composition 2 (Low red backed vole years) 
+### Priors 
+``` 
+p4 <- c(set_prior("normal(0,100)", class="b", coef="Species1"),
+        set_prior("normal(0,100)", class="b", coef="Species3"),
+        set_prior("normal(0,100)", class="b", coef="Trapline1"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline2"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline3"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline5"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline7"), 
+        set_prior("normal(0,100)", class="b", coef="Trapline8"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline1"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline2"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline3"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline5"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline7"), 
+        set_prior("normal(0,100)", class="b", coef="Species1:Trapline8"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline1"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline2"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline3"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline5"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline7"), 
+        set_prior("normal(0,100)", class="b", coef="Species3:Trapline8"), 
+        set_prior("normal(0,100)", class="b", coef="date.julian"),
+        set_prior("normal(0,100)", class="b", coef="Species1:date.julian"),
+        set_prior("normal(0,100)", class="b", coef="Species3:date.julian"), 
+        set_prior("normal(0,100)", class="b", coef="Year4"));p4
+ ``` 
+ ### Model 2 (Low red backed vole years) 
+ ```
+ comm.comp2 <- brm(OrangeMites~Species+Trapline+Year+date.julian+Species:Trapline+Species:date.julian, 
+                  data=orangemitedata_v2[!orangemitedata_v2$Trapline==9,][c(3,4,8,10,13,14)] %>% 
+                    subset(Year == 3 | Year == 4), 
+                  family=bernoulli(),
+                  prior = p4,
+                  warmup = 4000,
+                  iter =8000, 
+                  thin=2,
+                  seed=123,
+                  chains = 4,
+                  cores = 2, 
+                  save_all_pars=T, 
+                  control = list(adapt_delta=0.99, max_treedepth=15))
+saveRDS(comm.comp2, "comm_comp2.RDS")                                               ## save model
+comm.comp2<- readRDS("comm_comp2.RDS")                                              ## load model (more future use) 
+``` 
+# Influence of red backed vole abundance on infection probability 
+### Priors 
+``` 
+p4 <- get_prior(OrangeMites~perc_rbv+Species*perc_rbv+(1|TagLeft), 
+                family=bernoulli(), 
+                data=orangemitedata_v3[!orangemitedata_v3$Trapline==9,]);p4
+#%>% 
+#subset(Trapline == 2|Trapline == 4|Trapline == 5|Trapline == 6|Trapline == 7)%>%
+#group_by(TagLeft) %>% 
+#top_n(1, date.julian))
+p4 <- c(set_prior("normal(0,100)", class="b", coef="Species1"),
+        set_prior("normal(0,100)", class="b", coef="Species3"),
+        set_prior("normal(0,100)", class="b", coef="perc_rbv"), 
+        set_prior("normal(0,100)", class="b", coef="perc_rbv:Species1"), 
+        set_prior("normal(0,100)", class="b", coef="perc_rbv:Species3"));p4
+``` 
+### Model 
+```
+#%>% subset(Species == 1|Species==2|Species)
+rbv_pop_model <- brm(OrangeMites~perc_rbv+Species*perc_rbv+(1|TagLeft), 
+                     data=orangemitedata_v3[!orangemitedata_v3$Trapline==9,], 
+                     family=bernoulli(),
+                     prior = p4,
+                     warmup = 4000,
+                     iter =8000, 
+                     thin=2,
+                     seed=123,
+                     chains = 4,
+                     cores = 2, 
+                     save_all_pars=T, 
+                     control = list(adapt_delta=0.99, max_treedepth=15))
+saveRDS(rbv_pop_model, "rbv_pop_model.RDS")                                       ## save model
+rbv_pop_model <- readRDS("rbv_pop_model.RDS")                                     ## load model (for future use)
+``` 
+# Figures 
+## Figure 1 
+
+ 
