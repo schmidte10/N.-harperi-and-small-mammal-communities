@@ -269,5 +269,109 @@ rbv_pop_model <- readRDS("rbv_pop_model.RDS")                                   
 ``` 
 # Figures 
 ## Figure 1 
+#### Note: 'comm.comp1' NEEDS TO BE LOADED!!!!
+```
+var <- get_variables(comm.comp1)                                                ## character vector of the names of the variables in a variety of fitted Bayesian model types
+vari <- get_variables(comm.comp1)[c(1,4:9,12:23)]                               ## select only the variables needed for figure
 
- 
+comm.comp1_int_draws2 <- comm.comp1 %>% spread_draws(!!!syms(vari))             ## extract posterior draws for the variables selected above ^
+
+comm.comp1_draws <- comm.comp1 %>% gather_draws(b_Intercept, b_Species1, b_Species3) %>%  ##
+  left_join(comm.comp1_int_draws2, by = c(".chain",".iteration",".draw")) %>% 
+  mutate(Trapline4_mean = case_when(`.variable` == 'b_Intercept' ~ 
+                                      `.value`, 
+                                    
+                                    `.variable` != 'b_Intercept' ~ 
+                                      `.value` + b_Intercept), 
+         
+         Trapline1_mean = case_when(`.variable` == 'b_Intercept' ~ 
+                                      `.value` + b_Trapline1, 
+                                    `.variable` == 'b_Species1' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline1 + `b_Species1:Trapline1`, 
+                                    `.variable` == 'b_Species3' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline1 + `b_Species3:Trapline1`), 
+         
+         Trapline2_mean = case_when(`.variable` == 'b_Intercept' ~ 
+                                      `.value` + b_Trapline2, 
+                                    `.variable` == 'b_Species1' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline2 + `b_Species1:Trapline2`, 
+                                    `.variable` == 'b_Species3' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline2 + `b_Species3:Trapline2`), 
+         
+         Trapline3_mean = case_when(`.variable` == 'b_Intercept' ~ 
+                                      `.value` + b_Trapline3, 
+                                    `.variable` == 'b_Species1' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline3 + `b_Species1:Trapline3`, 
+                                    `.variable` == 'b_Species3' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline3 + `b_Species3:Trapline3`), 
+         
+         Trapline5_mean = case_when(`.variable` == 'b_Intercept' ~ 
+                                      `.value` + b_Trapline5, 
+                                    `.variable` == 'b_Species1' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline5 + `b_Species1:Trapline5`, 
+                                    `.variable` == 'b_Species3' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline5 + `b_Species3:Trapline5`), 
+         
+         Trapline7_mean = case_when(`.variable` == 'b_Intercept' ~ 
+                                      `.value` + b_Trapline7, 
+                                    `.variable` == 'b_Species1' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline7 + `b_Species1:Trapline7`, 
+                                    `.variable` == 'b_Species3' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline7 + `b_Species3:Trapline7`), 
+         
+         Trapline8_mean = case_when(`.variable` == 'b_Intercept' ~ 
+                                      `.value` + b_Trapline8, 
+                                    `.variable` == 'b_Species1' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline8 + `b_Species1:Trapline8`, 
+                                    `.variable` == 'b_Species3' ~ 
+                                      `.value` + b_Intercept + 
+                                      b_Trapline8 + `b_Species3:Trapline8`), 
+         
+         transformed_trapline4 = exp(Trapline4_mean)/(1+exp(Trapline4_mean)), 
+         transformed_trapline1 = exp(Trapline1_mean)/(1+exp(Trapline1_mean)), 
+         transformed_trapline2 = exp(Trapline2_mean)/(1+exp(Trapline2_mean)), 
+         transformed_trapline3 = exp(Trapline3_mean)/(1+exp(Trapline3_mean)), 
+         transformed_trapline5 = exp(Trapline5_mean)/(1+exp(Trapline5_mean)), 
+         transformed_trapline7 = exp(Trapline7_mean)/(1+exp(Trapline7_mean)), 
+         transformed_trapline8 = exp(Trapline8_mean)/(1+exp(Trapline8_mean))) 
+## 
+comm.comp1_draws_plotting <-  comm.comp1_draws %>% 
+  pivot_longer(cols = starts_with("transformed"), 
+               names_to = "Trapline", 
+               values_to = "infect_prob") %>% 
+  transmute(species = case_when(`.variable` == "b_Intercept" ~ "RBV", 
+                                `.variable` == "b_Species1" ~ "DM", 
+                                `.variable` == "b_Species3" ~ "WJM"), 
+            trapline = case_when(Trapline == 'transformed_trapline4' ~ "trapline4", 
+                                 Trapline == 'transformed_trapline1' ~ "trapline1", 
+                                 Trapline == 'transformed_trapline2' ~ "trapline2",
+                                 Trapline == 'transformed_trapline3' ~ "trapline3",
+                                 Trapline == 'transformed_trapline5' ~ "trapline5",
+                                 Trapline == 'transformed_trapline7' ~ "trapline7",
+                                 Trapline == 'transformed_trapline8' ~ "trapline8"), 
+            infect_prob = infect_prob, 
+            speciesb = species, 
+            traplineb = trapline, 
+            chain = `.chain`, 
+            iteration = `.iteration`, 
+            draw_num = `.draw`) %>% 
+  unite("id",speciesb,traplineb,sep = "_") %>% 
+  mutate(id = factor(id, levels = c("RBV_trapline4","DM_trapline4","WJM_trapline4", 
+                                    "RBV_trapline1","DM_trapline1","WJM_trapline1", 
+                                    "RBV_trapline2","DM_trapline2","WJM_trapline2", 
+                                    "RBV_trapline3","DM_trapline3","WJM_trapline3",
+                                    "RBV_trapline5","DM_trapline5","WJM_trapline5",
+                                    "RBV_trapline7","DM_trapline7","WJM_trapline7",
+                                    "RBV_trapline8","DM_trapline8","WJM_trapline8")))
+ ```
