@@ -482,7 +482,7 @@ p2 <- bind_rows(p_rbvdm,p_rbvwjm,p_dmwjm) %>%                                   
   mutate(trapline_proper = factor(trapline_proper, levels = c("Sugar maple hardwood", "Cut-over mixed-wood", "Dense mixed-wood", #convert column to factor
                                                               "Conifer", "White pine/white spruce", "Black spruce/aspen", 
                                                               "White/red pine"))) %>% 
-  mutate(comparison = factor(comparison, levels = c("dm.wjm","rbv.wjm","rbv.dm")))                                               # convert column to factor
+  mutate(comparison = factor(comparison, levels = c("dm.wjm","rbv.wjm","rbv.dm")))      ## convert column to factor
 
 
 sp_comp <- ggplot(p2, aes(infect_prob, comparison, fill=comparison))+                   ## begin plotting figure
@@ -584,3 +584,181 @@ habitat_comp                                                                    
 dev.off()
 ``` 
 All of these figures and tables were created for community compositons 1 & 2 (high and low abundance red backed vole years). Different dataframes were used for each year however the process for making the figures remained the same. Please feel free to contact me using the contact information on my GitHub profile is you have any problems, questions, or concerns regardin the data manipulation/organisation or creation of figures. Hope you were able to find the code above helpful. 
+
+# Body condition data 
+load packages (assuming packages from first part of analysis are already loaded)
+```
+library(vegan)
+library(nnet) 
+library(lme4)
+library(AICcmodavg)
+library(DescTools)
+library(nlme)
+library(visreg)
+library(car)
+library(MuMIn)
+library(broom)
+```  
+## Importing, cleaning, and organizing data
+``` 
+sampling <- read_csv("sampling_periods.csv")                                                  ## import data
+bc <- read_excel("Small Mammal Project 2016 (ALL)_cleaned.xlsx",                              ## import data
+                 sheet = "Falls Lines") %>% 
+  clean_names() %>%                                                                           ## use the janitor package to clean up the names so everything's consistent
+  filter(age == 'A') %>%                                                                      ## subset to only adults JV
+  filter(!(repro_cond == 'PERF/PREG' | repro_cond == 'Preg' | repro_cond == 'PREG' |          ## subset to remove preg JV
+  repro_cond == 'Preg/Lac'| repro_cond == 'PREG/LAC' | repro_cond == 'PREG/PERF')) %>%
+  mutate(skull_length = as.numeric(skull_length), tag_left = as.factor(tag_left)) %>%         ## convert skull length to numeric like the rest of the variables JV
+  filter(species == 'DM' | species == 'RBV') %>%                                              ## subset the df to only the species we're interested in
+  mutate(julian_date = yday(date)) %>%                                                        ## group into sampling periods based on date
+  left_join(sampling, by = "julian_date") %>%                                              ## connect the sampling csv with this df by matching the julian dates from each other
+  
+  ## so now we have a whole column of sampling periods based on the julian dates for each observations
+  
+  arrange(tag_left) %>%                                                                       ## now we order by individual
+  group_by(tag_left, sampling_period) %>%                                                     ## then group by individual and sampling period
+  mutate(avg_weight_sampling_period = mean(weight, na.rm = TRUE)) %>%                         ## create average for weight JV
+  mutate(tag_left_num = as.numeric(tag_left)) %>%                                             ## create column where tag number is numeric
+  distinct(avg_weight_sampling_period, tag_left_num, .keep_all = TRUE) %>%                    ## remove duplicates that occured within the same trapping period
+  ungroup() %>%                                                                         ## now remove that grouping variable so we can group by individual over the whole summer
+  group_by(tag_left) %>%                                                                ## by individual across all samples
+  mutate(avg_tail_summer = mean(tail, na.rm = TRUE),                                    ## make a new column to average measures we care about JV
+         avg_hindfoot_summer = mean(hindfoot, na.rm = TRUE),
+         avg_ear_summer = mean(ear, na.rm = TRUE),
+         avg_skull_width_summer = mean(skull_width, na.rm = TRUE),
+         avg_skull_length_summer = mean(skull_length, na.rm = TRUE)) %>% 
+  mutate(group = case_when(any(orange_mites_y_n == "Y") ~ "Parasitized", TRUE ~ "Uninfected")) %>%    ## creating infection stages col JV
+  ungroup() %>%                                                                                       ## ungroup 
+  mutate(infection_stage = case_when((group == "Parasitized" & orange_mites_y_n == "Y") ~ "After",    ## create new columns based on conditions
+                                     (group == "Parasitized" & orange_mites_y_n == "N") ~ "Before",
+                                     (group == "Uninfected") ~ "Before",
+                                     TRUE ~ "NA")) %>%
+                                     
+  ## There were two individuals that switched from having mites to not having mites. The code below makes sure they are still listed as "after" when they lose their mites JV
+  
+  mutate(infection_stage = case_when((tag_left == 50468 & julian_date > 196) ~ "After",
+                                     (tag_left == 50968 & julian_date > 207) ~ "After",
+                                     TRUE ~ infection_stage)) %>%
+  mutate(group = as.factor(group), infection_stage = as.factor(infection_stage)) %>%    ## makes 'group' and 'infection_stage' factors
+  filter(infection_stage != "NA") %>%                                                   ## remove NAs from infection stage column
+  unite(infection, c("group", "infection_stage"), remove = FALSE) %>%                   ## join 'group' and 'infection stage' columns into new column called 'infection'
+  mutate(infection = as.factor(infection)) %>%                                          ## make new column 'infection' a factor
+  drop_na(avg_skull_width_summer, avg_skull_length_summer, avg_hindfoot_summer,         ## removing NA's JV
+          avg_weight_sampling_period) %>%
+  mutate(sex = as.factor(sex))                                                          ## formatting predictors JV 
+#write_csv(df, "smammals_cleaned_and_grouped.csv")                                      ## if you wish remove the '#' at the start of the code to export the data as a .csv file
+
+##Creating dataframes for each sp
+
+dm  = bc %>% filter(species == "DM")
+rbv = bc %>% filter(species == "RBV")
+``` 
+The example below examines data pertaining to deer mice, however, the same process was used for red backed voles*. *when looking at red backed voles an addition term sex:date_s was included in the model to account for the potential interaction between sex and changes in body condition over time. 
+
+## Princple component analysis for deer mice 
+``` 
+pca_dm <- princomp(~ avg_hindfoot_summer + avg_skull_length_summer + avg_skull_width_summer, dm, cor = TRUE) 
+loadings(pca_dm)
+summary(pca_dm)
+screeplot(pca_dm)
+eigenvals(pca_dm) 
+body_size_dm <- (pca_dm$scores[,1])
+head(body_size_dm)
+``` 
+## Body condition (deer mice) 
+``` 
+##linear model to visualize relationship between body size and weight 
+
+bodycond_correlation_dm <- lm(dm$avg_weight_sampling_period ~ body_size_dm)
+summary(bodycond_correlation_dm)
+plot(body_size_dm ~ dm$avg_weight_sampling_period) 
+
+##taking residuals from plot to get body condition scores 
+
+head(bodycond_correlation_dm$residuals)
+dm$bodycondition <- bodycond_correlation_dm$residuals
+hist(dm$bodycondition)
+``` 
+##  Model (deer mice) - relationship between infection probability and body condition 
+```
+dm = dm %>% mutate(date_s = scale(date))    ## scale data 
+dm$infection <- as.factor(dm$infection)     ## make infectio variable a factor (if it is not already)   
+```  
+### Priors 
+``` 
+prior_dm <- get_prior(bodycondition ~ infection + sex + date_s+(1|tag_left), 
+                      data=dm,
+                      family=gaussian())
+prior_dm <- c(set_prior("normal(0,100)", class="b", coef="date_s"),
+                set_prior("normal(0,100)", class="b", coef="infectionParasitized_Before"),
+                set_prior("normal(0,100)", class="b", coef="infectionUninfected_Before"), 
+                set_prior("normal(0,100)", class="b", coef="sexM")); prior_dm
+``` 
+### Model
+``` 
+m_dm <- brm(bodycondition ~ infection + sex + date_s+(1|tag_left), 
+                  data=dm, 
+                  family=gaussian(),
+                  prior = prior_dm,
+                  warmup = 2500,
+                  iter =5000, 
+                  thin=2,
+                  seed=123,
+                  chains = 4,
+                  cores = 2, 
+                  save_all_pars=T, 
+                  control = list(adapt_delta=0.99, max_treedepth=15))
+saveRDS(m_dm, "m_dm_bayes.RDS")     ## save model
+m_dm<- readRDS("m_dm_bayes.RDS")    ## load model (if it isn't already loaded) 
+summary(m_dm)                       ## summart of model 
+conditional_effects(m_dm)           ## quick peek at results 
+
+## checking how well the model worked 
+
+plot(m_dm)
+plot(resid(m_dm))
+pp_check(m_dm)
+stan_ac(m_dm$fit) 
+stan_diag(m_dm$fit) 
+
+Resid.brm <- residuals(m_dm, type='pearson')
+Fitted.brm <- fitted(m_dm, scale='response')
+ggplot(data=NULL, aes(y=Resid.brm[,'Estimate'], x=Fitted.brm[,'Estimate'])) + geom_point()
+``` 
+## Model looking at relationship between body condition and sex in red backed voles
+The body condition of females was found to be significantly higher than the body condition of males in red backed voles, therefore an additional model was run for voles to determine if mite infection favored one of the sexes (i.e. if mites infected red backed vole males more than females it may explain why male body condition was lower than female body condition 
+``` 
+rbv2 <- rbv %>% subset(orange_mites_y_n!="NA") %>%                          ## remove rows that have NA in orange_mite_y_n column from the dataframe
+  mutate(OrangeMites = ifelse(orange_mites_y_n=="N",0,1)) %>%               ## create 'OrangeMites' column where by a N = 0, otherwise (Y) = 1
+  mutate_at("sex",factor)                                                   ## make sure 'sex' is factor
+rbv2$sex  <- relevel(rbv2$sex  , ref = "M")                                 ## make male ('M') the reference variable 
+```
+## Priors 
+```
+prior_rbv2 <- get_prior(bodycondition ~ OrangeMites+sex+OrangeMites:sex+(1|tag_left), 
+                       data=rbv2,
+                       family=gaussian());prior_rbv2
+prior_rbv <- c(set_prior("normal(0,100)", class="b", coef="OrangeMites"),
+               set_prior("normal(0,100)", class="b", coef="OrangeMites:sexF"),
+               set_prior("normal(0,100)", class="b", coef="sexF")); prior_rbv
+```
+## Model
+```
+
+m_rbv_sex <- brm(bodycondition ~ OrangeMites+sex+OrangeMites:sex+(1|tag_left), 
+             data=rbv2, 
+             family=gaussian(),
+             prior = prior_rbv,
+             warmup = 2500,
+             iter =5000, 
+             thin=2,
+             seed=123,
+             chains = 4,
+             cores = 2, 
+             save_all_pars=T, 
+             control = list(adapt_delta=0.99, max_treedepth=15))
+saveRDS(m_rbv_sex, "m_rbv_bayes_sex.RDS")
+conditional_effects(m_rbv_sex)
+m_rbv_sex <- readRDS("m_rbv_bayes_sex.RDS")
+summary(m_rbv_sex)
+```
