@@ -472,7 +472,8 @@ write.csv(table1, "table1_commcomp1.csv", row.names = T)      ## convert the tab
 
 
 p2 <- bind_rows(p_rbvdm,p_rbvwjm,p_dmwjm) %>%                                                   ## combine p_rbvdm, p_rbvwjm, and p_dmwjm 
-  mutate(trapline_proper = case_when((trapline == "trapline1") ~ "Sugar maple hardwood",        ## Make a new column that will change trapline names so there correspond the                                          (trapline == "trapline2") ~ "Cut-over mixed-wood",         ## approporiate habitat type
+  mutate(trapline_proper = case_when((trapline == "trapline1") ~ "Sugar maple hardwood",        ## Make a new column that will change trapline names so there correspond the 
+                                     (trapline == "trapline2") ~ "Cut-over mixed-wood",         ## appropriate habitat type       
                                      (trapline == "trapline3") ~ "Dense mixed-wood",
                                      (trapline == "trapline4") ~ "Conifer",
                                      (trapline == "trapline5") ~ "White pine/white spruce",
