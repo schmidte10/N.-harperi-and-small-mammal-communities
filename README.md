@@ -269,8 +269,8 @@ rbv_pop_model <- readRDS("rbv_pop_model.RDS")                                   
 ``` 
 # Figures 
 ## Figure 1 [place holder for actually figure number in the manuscript] 
-#### Before we can start plotting we need to make sure we are plotting with the correct values the code below take you through the steps on how to extract the proper values to create the dataframe necessary to begin plotting
-## Note: 'comm.comp1' NEEDS TO BE LOADED!!!! (or whatever you called your brms model). tl;dr - Your model needs to be loaded for this to work.
+Before we can start plotting we need to make sure we are plotting with the correct values the code below take you through the steps on how to extract the proper values to create the dataframe necessary to begin plotting
+Note: 'comm.comp1' NEEDS TO BE LOADED!!!! (or whatever you called your brms model). tl;dr - Your model needs to be loaded for this to work.
 ```
 var <- get_variables(comm.comp1)                                                ## character vector of the names of the variables in a variety of fitted Bayesian model types
 vari <- get_variables(comm.comp1)[c(1,4:9,12:23)]                               ## select only the variables needed for figure [trapline and trapline:species interactions]
@@ -379,11 +379,9 @@ comm.comp1_draws_plotting <-  comm.comp1_draws %>%
                                     "RBV_trapline7","DM_trapline7","WJM_trapline7",
                                     "RBV_trapline8","DM_trapline8","WJM_trapline8")))
  ``` 
-### You have now created your dataframe that wil be used for plotting!! Congratulations this has been a lot of work. Perhaps time to take a bit of a break, pat your self on   ### the back for getting here, and grab a drink. Next step is plotting, ready whenever you are.  
-#### Quick note the dataframe 'comm.comp1_draws_plotting' will also be used to creat figures 3 & 4
+You have now created your dataframe that wil be used for plotting!! Congratulations this has been a lot of work. Perhaps time to take a bit of a break, pat your self on   ### the back for getting here, and grab a drink. Next step is plotting, ready whenever you are. Quick note the dataframe 'comm.comp1_draws_plotting' will also be used to creat figures 3 & 4
  
-### Plotting will be down in ggplot2. For the first plot we will make use of the package 'ggridges' to get a nice look at our posterior distributions. The package 'ggridges'  
-### should be loaded from the beginning. 'ggridges' is a really useful plot for examining posterior draws. 
+Plotting will be down in ggplot2. For the first plot we will make use of the package 'ggridges' to get a nice look at our posterior distributions. The package 'ggridges' should be loaded from the beginning. 'ggridges' is a really useful plot for examining posterior draws. 
 ### Lets go!
  ```  
  ridge_plot2 <- comm.comp1_draws_plotting %>%                       
@@ -411,7 +409,7 @@ dev.off()
 ### Congrats! 
 
 ## Figure 2 [place holder for actually figure number in the manuscript] 
-#### Once again before starting make sure that your model is loaded
+Once again before starting make sure that your model is loaded
 ``` 
 prp <- orangemitedata_v3 %>%                                                                ## dataframe that the model was run on 
   group_by(Species) %>%                                                                     ## group by 'species' variable
@@ -440,20 +438,20 @@ pdf(file = "perc_rbv_pop_model.pdf", height = 10, width=14)                     
 prp                                                                                         ## plot 
 dev.off()
 ``` 
-## Figure 3 
+## Figure 3 and Table 1 [place holder for actually figure and table number in the manuscript]
 ``` 
-p_rbv <- comm.comp1_draws_plotting[comm.comp1_draws_plotting$species=="RBV",]
-p_dm <- comm.comp1_draws_plotting[comm.comp1_draws_plotting$species=="DM",]
-p_wjm <- comm.comp1_draws_plotting[comm.comp1_draws_plotting$species=="WJM",] 
-p <- left_join(p_rbv, p_dm, by=c("trapline","draw_num")) %>% 
-  left_join(p_wjm, by=c("trapline", "draw_num")) %>% 
+p_rbv <- comm.comp1_draws_plotting[comm.comp1_draws_plotting$species=="RBV",]     ## subset posterior draws that are red backed voles [RBV]
+p_dm <- comm.comp1_draws_plotting[comm.comp1_draws_plotting$species=="DM",]       ## subset posterior draws that are deer mice [DM] 
+p_wjm <- comm.comp1_draws_plotting[comm.comp1_draws_plotting$species=="WJM",]     ## subset posterior draws that are woodland jumpin mice [wjm]
+p <- left_join(p_rbv, p_dm, by=c("trapline","draw_num")) %>%                      ## left join p_rbv, p_dm, p_wjm; simply reorganizing the dataframe
+  left_join(p_wjm, by=c("trapline", "draw_num")) %>%                              
   mutate( 
-    rbv.dm = infect_prob.x - infect_prob.y, 
-    rbv.wjm = infect_prob.x - infect_prob, 
-    dm.wjm = infect_prob.y - infect_prob)
-p_rbvdm <- p[,c(3,21)] %>% 
-  mutate(comparison = "rbv.dm") %>% 
-  rename(infect_prob = rbv.dm)
+    rbv.dm = infect_prob.x - infect_prob.y,              ## substract infection probability of red backed voles (infect_prob.x) from that of deer mice (infect_prob.y) 
+    rbv.wjm = infect_prob.x - infect_prob,               ## substract infection probability of red backed voles (infect_prob.x) from that of woodland jumping mice (infect_prob)
+    dm.wjm = infect_prob.y - infect_prob)                ## substract infection probability of deer mice (infect_prob.y) from that of woodland jumping mice (infect_prob)
+p_rbvdm <- p[,c(3,21)] %>%                               ## subset values from the rbv.dm comparison and column that lists the traplines
+  mutate(comparison = "rbv.dm") %>%                      ## create a new column that lists the species comparison that is beinmade (this will be useful later on) 
+  rename(infect_prob = rbv.dm)                           ## rename the rbv.dm column 'infect_prob' - now repear the process for the different comparisons made. 
 p_rbvwjm <- p[,c(3,22)] %>% 
   mutate(comparison = "rbv.wjm") %>% 
   rename(infect_prob = rbv.wjm) 
@@ -461,43 +459,127 @@ p_dmwjm <- p[,c(3,23)] %>%
   mutate(comparison = "dm.wjm") %>% 
   rename(infect_prob = dm.wjm) 
 
-
+## Code below is used to obtain the median as well as lower and upper HPD interval for differences in infection probability between different species
 db_rbvdm <- as.data.frame(t(aggregate(p_rbvdm$infect_prob ~ p_rbvdm$trapline, FUN = function(i)c(median = median(i), HPDinterval = hdi(i)))))%>% 
   row_to_names(row_number = 1)
 db_rbvwjm <- as.data.frame(t(aggregate(p_rbvwjm$infect_prob ~ p_rbvwjm$trapline, FUN = function(i)c(median = median(i), HPDinterval = hdi(i)))))%>% 
   row_to_names(row_number = 1)
 db_dmwjm <- as.data.frame(t(aggregate(p_dmwjm$infect_prob ~ p_dmwjm$trapline, FUN = function(i)c(median = median(i), HPDinterval = hdi(i)))))%>% 
   row_to_names(row_number = 1)
-table1 <- rbind(db_rbvdm, db_rbvwjm, db_dmwjm) 
-write.csv(table1, "table1_commcomp1.csv", row.names = T)
+table1 <- rbind(db_rbvdm, db_rbvwjm, db_dmwjm)                ## combined all the values into one table
+write.csv(table1, "table1_commcomp1.csv", row.names = T)      ## convert the table to a .csv file and save it to the working directory
 
 
-p2 <- bind_rows(p_rbvdm,p_rbvwjm,p_dmwjm) %>% 
-  mutate(trapline_proper = case_when((trapline == "trapline1") ~ "Sugar maple hardwood", 
+p2 <- bind_rows(p_rbvdm,p_rbvwjm,p_dmwjm) %>%                                                   ## combine p_rbvdm, p_rbvwjm, and p_dmwjm (make sure you have the right                                                                                                         ## dataframes, these are not the table dataframes that were just saved as a .csv                                                                                                 ## file but rather the ones that were made before that)
+  mutate(trapline_proper = case_when((trapline == "trapline1") ~ "Sugar maple hardwood",        ## Make a new column that will change trapline names so there correspond to the                                                                                                 ## approporiate habitat type
                                      (trapline == "trapline2") ~ "Cut-over mixed-wood", 
                                      (trapline == "trapline3") ~ "Dense mixed-wood",
                                      (trapline == "trapline4") ~ "Conifer",
                                      (trapline == "trapline5") ~ "White pine/white spruce",
                                      (trapline == "trapline7") ~ "Black spruce/aspen",
                                      TRUE ~ "White/red pine")) %>% 
-  mutate(trapline_proper = factor(trapline_proper, levels = c("Sugar maple hardwood", "Cut-over mixed-wood", "Dense mixed-wood",
+  mutate(trapline_proper = factor(trapline_proper, levels = c("Sugar maple hardwood", "Cut-over mixed-wood", "Dense mixed-wood", #convert column to factor
                                                               "Conifer", "White pine/white spruce", "Black spruce/aspen", 
                                                               "White/red pine"))) %>% 
-  mutate(comparison = factor(comparison, levels = c("dm.wjm","rbv.wjm","rbv.dm")))
+  mutate(comparison = factor(comparison, levels = c("dm.wjm","rbv.wjm","rbv.dm")))                                               # convert column to factor
 
 
-sp_comp <- ggplot(p2, aes(infect_prob, comparison, fill=comparison))+ 
-  geom_vline(xintercept=0, lty=2, color="grey28")+
-  stat_halfeye(interval_colour="red", point_colour="darkred", point_fill="red")+
-  facet_wrap(~trapline_proper, scales = "free_y")+theme_classic()+ 
-  scale_fill_manual(values = c('grey10', 'grey10', 'grey10'),guide=F)+ 
-  xlab("P(Infection)")+ylab("Comparisons")+ 
-  theme(axis.title.x = element_text(size=25), 
-        axis.text.x = element_text(size=18), 
-        axis.title.y = element_text(size=25), 
-        axis.text.y = element_text(size=18),
-        strip.text = element_text(size=20));sp_comp
+sp_comp <- ggplot(p2, aes(infect_prob, comparison, fill=comparison))+                   ## begin plotting figure
+  geom_vline(xintercept=0, lty=2, color="grey28")+                                      ## create verticle line on the x-axis at 0
+  stat_halfeye(interval_colour="red", point_colour="darkred", point_fill="red")+        ## show posterior distribution using stat_halfeye
+  facet_wrap(~trapline_proper, scales = "free_y")+theme_classic()+                      ## facet wrap figure based on habitat type (`trapline proper`)
+  scale_fill_manual(values = c('grey10', 'grey10', 'grey10'),guide=F)+                  ## Manually fill in colors; no legend
+  xlab("P(Infection)")+ylab("Comparisons")+                                             ## axis labels
+  theme(axis.title.x = element_text(size=25),                                           ## x-axis label title size
+        axis.text.x = element_text(size=18),                                            ## x-axis text size
+        axis.title.y = element_text(size=25),                                           ## y-axis label title size
+        axis.text.y = element_text(size=18),                                            ## y-axis text size
+        strip.text = element_text(size=20));sp_comp                                     ## facet plot title size
   
-pdf(file = "species_comparisons.pdf", height = 10, width=14)
-sp_comp
+pdf(file = "species_comparisons.pdf", height = 10, width=14)                            ## save as .pdf
+sp_comp                                                                                 ## plot
 dev.off()
+```
+## Figure 4 and Table 2 [place holder for actually figure and table number in the manuscript]
+Remember you will need to have created the dataframe comm.comp1_draws_plotting (see above) to create this figure
+```
+p <- comm.comp1_draws_plotting  %>% 
+  group_by(trapline) %>%                                                  ## group by trapline
+  group_split()%>%                                                        ## split into different dataframes based in trapline (habitat)
+  reduce(left_join, by=c("species","chain","iteration","draw_num")) %>%   ## combines dataframes (simply to left_join); reorganization of dataframes
+  ungroup() %>%                                                           ## ungroup dataframe
+  group_by(species) %>%                                                   ## group by species
+  group_split()                                                           ## split dataframe apart based on species
+
+hd <- list()                                                              ## create an empty list called 'hd'
+habitat <- list()                                                         ## create an empty list called 'habitat'
+for (i in 1:3) {                                                          ## run a for loop that compares infection probability between habitat types for each species
+  habitat[[i]] <- p[[i]] %>% 
+    mutate(`4-1` = infect_prob.y.y - infect_prob.x, 
+           `4-2` = infect_prob.y.y - infect_prob.y, 
+           `4-3` = infect_prob.y.y - infect_prob.x.x, 
+           `4-5` = infect_prob.y.y - infect_prob.x.x.x, 
+           `4-7` = infect_prob.y.y - infect_prob.y.y.y, 
+           `4-8` = infect_prob.y.y - infect_prob, 
+           `1-2` = infect_prob.x - infect_prob.y, 
+           `1-3` = infect_prob.x - infect_prob.x.x,
+           `1-5` = infect_prob.x - infect_prob.x.x.x, 
+           `1-7` = infect_prob.x - infect_prob.y.y.y, 
+           `1-8` = infect_prob.x - infect_prob, 
+           `2-3` = infect_prob.y - infect_prob.x.x, 
+           `2-5` = infect_prob.y - infect_prob.x.x.x, 
+           `2-7` = infect_prob.y - infect_prob.y.y.y, 
+           `2-8` = infect_prob.y - infect_prob, 
+           `3-5` = infect_prob.x.x - infect_prob.x.x.x,
+           `3-7` = infect_prob.x.x - infect_prob.y.y.y, 
+           `3-8` = infect_prob.x.x - infect_prob, 
+           `5-7` = infect_prob.x.x.x - infect_prob.y.y.y, 
+           `5-8` = infect_prob.x.x.x - infect_prob, 
+           `7-8` = infect_prob.y.y.y - infect_prob) %>% 
+    select(c(2,6:8,33:53))                                                ## select columns for 'species', 'chain', 'iteration', 'draw_num', and all habitat comparisons
+  
+  hd[[i]] <- habitat[[i]][5:25] %>%                                       ## place habitat comparisons within a new list 'hd', only include habitat comparisons
+    summarise_each(list(mean = mean, hdi = hdi)) %>%                      ## summarise comparisons by getting the mean and HDI (lower and upper)
+    as.data.frame()%>% t() %>%                                            ## create a dataframe for habitat comaprisons for each species; transpose
+    as.data.frame()                                                       ## make dataframe
+}
+hd[[1]] <- rename(hd[[1]], DM.lower = "V1", DM.upper = "V2")              ## rename dataframe columns as DM.lower and DM.upper (repeat for other dataframes/species
+hd[[2]] <- rename(hd[[2]], RBV.lower = "V1", RBV.upper = "V2")
+hd[[3]] <- rename(hd[[3]], WJM.lower = "V1", WJM.upper = "V2")
+hrdw <- cbind(hd[[1]],hd[[2]],hd[[3]])                                    ## combined columns 
+                                                                          ## note that in the table create the rows that contain the mean will be the same for .lower and .upper                                                                           ## columns, however the HDI lower and upper values shoud be different 
+write.csv(hrdw, "table2_commcomp1.csv", row.names = T)                    ## write table as a .csv value; will be placed in your working directory 
+
+p2 <- list()                                                              ## create list called p2
+for (i in 1:3) {                                                          ## create 'for' loop
+  p2[[i]] <-  habitat[[i]][5:25] %>% gather()%>%                          ## gether posterior draws from 'habitat' list for all habitat (trapline) comparisons
+    mutate(species = paste(unique(habitat[[i]][1]))) %>%                  ## create a new column that contains the species name
+    rename(comparison = "key",                                            ## rename columns
+           infect_prob = "value", 
+           species = "species")
+}
+
+
+
+p2_plot <- rbind(p2[[1]],p2[[2]],p2[[3]]) %>%                             ## rejoin species data
+  as.data.frame()                                                         ## make a dataframe
+
+
+habitat_comp <- ggplot(p2_plot, aes(infect_prob, comparison))+                              ## begin plotting
+  geom_vline(xintercept=0, lty=2, color="grey28")+                                          ## create a vertical line that will at value 0 on the x-axis
+  stat_pointinterval(interval_colour="red", point_colour="darkred", point_fill="red")+      ## use stat_pointinterval for plotting (too many comparisons for stat_halfeye)
+  facet_wrap(~species)+theme_classic()+                                                     ## facet wrap plots
+  scale_fill_manual(values = c('grey10', 'grey10', 'grey10'),guide=F)+                      ## fill in colors (choosing them to be all the same) 
+  xlab("P(Infection)")+ylab("Comparisons")+                                                 ## axis labels
+  theme(axis.title.x = element_text(size=25),                                               ## x-axis label title size
+        axis.text.x = element_text(size=18),                                                ## x-axis text size
+        axis.title.y = element_text(size=25),                                               ## y-axis label title size
+        axis.text.y = element_text(size=18),                                                ## y-axis text size
+        strip.text = element_text(size=20),                                                 ## facet plot titles size
+        panel.spacing = unit(2, "lines")); habitat_comp                                     ## spacing between panels
+
+pdf(file = "habitat_comp.pdf", height = 10, width=14)                                       ## save as .pdf
+habitat_comp                                                                                ## plot
+dev.off()
+``` 
+All of these figures and tables were created for community compositons 1 & 2 (high and low abundance red backed vole years). Different dataframes were used for each year however the process for making the figures remained the same. Please feel free to contact me using the contact information on my GitHub profile is you have any problems, questions, or concerns regardin the data manipulation/organisation or creation of figures. Hope you were able to find the code above helpful. 
