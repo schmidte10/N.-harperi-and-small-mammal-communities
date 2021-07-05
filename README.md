@@ -653,8 +653,6 @@ bc <- read_excel("Small Mammal Project 2016 (ALL)_cleaned.xlsx",                
 dm  = bc %>% filter(species == "DM")
 rbv = bc %>% filter(species == "RBV")
 ``` 
-The example below examines data pertaining to deer mice, however, the same process was used for red backed voles*. *when looking at red backed voles an addition term sex:date_s was included in the model to account for the potential interaction between sex and changes in body condition over time. 
-
 ## Princple component analysis for deer mice 
 ``` 
 pca_dm <- princomp(~ avg_hindfoot_summer + avg_skull_length_summer + avg_skull_width_summer, dm, cor = TRUE) 
@@ -725,6 +723,7 @@ Resid.brm <- residuals(m_dm, type='pearson')
 Fitted.brm <- fitted(m_dm, scale='response')
 ggplot(data=NULL, aes(y=Resid.brm[,'Estimate'], x=Fitted.brm[,'Estimate'])) + geom_point()
 ``` 
+The example below examines data pertaining to deer mice, however, the same process was used for red backed voles*. *when looking at red backed voles an addition term sex:date_s was included in the model to account for the potential interaction between sex and changes in body condition over time. 
 ## Model looking at relationship between body condition and sex in red backed voles
 The body condition of females was found to be significantly higher than the body condition of males in red backed voles, therefore an additional model was run for voles to determine if mite infection favored one of the sexes (i.e. if mites infected red backed vole males more than females it may explain why male body condition was lower than female body condition 
 ``` 
