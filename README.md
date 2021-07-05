@@ -268,9 +268,8 @@ saveRDS(rbv_pop_model, "rbv_pop_model.RDS")                                     
 rbv_pop_model <- readRDS("rbv_pop_model.RDS")                                     ## load model (for future use)
 ``` 
 # Figures 
-## Figure 1 [place holder for actually figure number in the manuscript] 
-Before we can start plotting we need to make sure we are plotting with the correct values the code below take you through the steps on how to extract the proper values to create the dataframe necessary to begin plotting
-Note: 'comm.comp1' NEEDS TO BE LOADED!!!! (or whatever you called your brms model). tl;dr - Your model needs to be loaded for this to work.
+
+Before we can start plotting we need to make sure we are plotting with the correct values the code below take you through the steps on how to extract the proper values to create the dataframe necessary to begin plotting. Note: 'comm.comp1' NEEDS TO BE LOADED!!!! (or whatever you called your brms model). 
 ```
 var <- get_variables(comm.comp1)                                                ## character vector of the names of the variables in a variety of fitted Bayesian model types
 vari <- get_variables(comm.comp1)[c(1,4:9,12:23)]                               ## select only the variables needed for figure [trapline and trapline:species interactions]
@@ -379,8 +378,9 @@ comm.comp1_draws_plotting <-  comm.comp1_draws %>%
                                     "RBV_trapline7","DM_trapline7","WJM_trapline7",
                                     "RBV_trapline8","DM_trapline8","WJM_trapline8")))
  ``` 
-You have now created your dataframe that wil be used for plotting!! Congratulations this has been a lot of work. Perhaps time to take a bit of a break, pat your self on   ### the back for getting here, and grab a drink. Next step is plotting, ready whenever you are. Quick note the dataframe 'comm.comp1_draws_plotting' will also be used to creat figures 3 & 4
- 
+You have now created your dataframe that wil be used for plotting!! Congratulations this has been a lot of work. Perhaps time to take a bit of a break, pat your self on the back, and grab a drink. Next step is plotting, ready whenever you are. Quick note the dataframe 'comm.comp1_draws_plotting' will also be used to creat figures 1,3, & 4; Tables 1 & 2. 
+
+## Figure 1 [place holder for actually figure number in the manuscript] 
 Plotting will be down in ggplot2. For the first plot we will make use of the package 'ggridges' to get a nice look at our posterior distributions. The package 'ggridges' should be loaded from the beginning. 'ggridges' is a really useful plot for examining posterior draws. 
 ### Lets go!
  ```  
@@ -460,6 +460,7 @@ p_dmwjm <- p[,c(3,23)] %>%
   rename(infect_prob = dm.wjm) 
 
 ## Code below is used to obtain the median as well as lower and upper HPD interval for differences in infection probability between different species
+
 db_rbvdm <- as.data.frame(t(aggregate(p_rbvdm$infect_prob ~ p_rbvdm$trapline, FUN = function(i)c(median = median(i), HPDinterval = hdi(i)))))%>% 
   row_to_names(row_number = 1)
 db_rbvwjm <- as.data.frame(t(aggregate(p_rbvwjm$infect_prob ~ p_rbvwjm$trapline, FUN = function(i)c(median = median(i), HPDinterval = hdi(i)))))%>% 
