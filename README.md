@@ -268,29 +268,30 @@ saveRDS(rbv_pop_model, "rbv_pop_model.RDS")                                     
 rbv_pop_model <- readRDS("rbv_pop_model.RDS")                                     ## load model (for future use)
 ``` 
 # Figures 
-## Figure 1 
-#### Note: 'comm.comp1' NEEDS TO BE LOADED!!!!
+## Figure 1 [place holder for actually figure number in the manuscript] 
+#### Before we can start plotting we need to make sure we are plotting with the correct values the code below take you through the steps on how to extract the proper values to create the dataframe necessary to begin plotting
+## Note: 'comm.comp1' NEEDS TO BE LOADED!!!! (or whatever you called your brms model). tl;dr - Your model needs to be loaded for this to work.
 ```
 var <- get_variables(comm.comp1)                                                ## character vector of the names of the variables in a variety of fitted Bayesian model types
-vari <- get_variables(comm.comp1)[c(1,4:9,12:23)]                               ## select only the variables needed for figure
+vari <- get_variables(comm.comp1)[c(1,4:9,12:23)]                               ## select only the variables needed for figure [trapline and trapline:species interactions]
 
 comm.comp1_int_draws2 <- comm.comp1 %>% spread_draws(!!!syms(vari))             ## extract posterior draws for the variables selected above ^
 
-comm.comp1_draws <- comm.comp1 %>% gather_draws(b_Intercept, b_Species1, b_Species3) %>%  ##
-  left_join(comm.comp1_int_draws2, by = c(".chain",".iteration",".draw")) %>% 
-  mutate(Trapline4_mean = case_when(`.variable` == 'b_Intercept' ~ 
-                                      `.value`, 
-                                    
-                                    `.variable` != 'b_Intercept' ~ 
-                                      `.value` + b_Intercept), 
+comm.comp1_draws <- comm.comp1 %>% gather_draws(b_Intercept, b_Species1, b_Species3) %>%  ## get the posterior draws for the intercept (reference value [RBV]), and other values                                                                                           ## (in this case other species [1 = deer mouse]; [2 = woodland jumping mouse]
+  left_join(comm.comp1_int_draws2, by = c(".chain",".iteration",".draw")) %>%             ## join collected draws from above ^ with posterior draws located in                                                                                                             ##  comm.comp1_int_draws2
+  
+  mutate(Trapline4_mean = case_when(`.variable` == 'b_Intercept' ~                        ### to get the mean probability of infection for each species on each trapline it is 
+                                      `.value`,                                           ### necessary to add values from the interecept (RBV on trapline 2) to those 
+                                    `.variable` != 'b_Intercept' ~                        ### pertaining to other factors in order to get the correct values. See below for an
+                                      `.value` + b_Intercept),                            ### example
          
-         Trapline1_mean = case_when(`.variable` == 'b_Intercept' ~ 
-                                      `.value` + b_Trapline1, 
-                                    `.variable` == 'b_Species1' ~ 
-                                      `.value` + b_Intercept + 
-                                      b_Trapline1 + `b_Species1:Trapline1`, 
+         Trapline1_mean = case_when(`.variable` == 'b_Intercept' ~                        ### For example to get the correct values for species 1 on trapleine 1 we would need 
+                                      `.value` + b_Trapline1,                             ### to added the intercept (b_intercept) to the value related to species 1 [DM;.value]
+                                    `.variable` == 'b_Species1' ~                         ### to the value related to trapline 1 (b_Trapline1), to the interaction between 
+                                      `.value` + b_Intercept +                            ### species 1:trapline1 (b_species1:Trapline1). This process needs to be repeated for
+                                      b_Trapline1 + `b_Species1:Trapline1`,               ### each speecies in each trapline. 
                                     `.variable` == 'b_Species3' ~ 
-                                      `.value` + b_Intercept + 
+                                      `.value` + b_Intercept +                            ### Remember that species 2 [RBV] is the reference factor. 
                                       b_Trapline1 + `b_Species3:Trapline1`), 
          
          Trapline2_mean = case_when(`.variable` == 'b_Intercept' ~ 
@@ -338,40 +339,165 @@ comm.comp1_draws <- comm.comp1 %>% gather_draws(b_Intercept, b_Species1, b_Speci
                                       `.value` + b_Intercept + 
                                       b_Trapline8 + `b_Species3:Trapline8`), 
          
-         transformed_trapline4 = exp(Trapline4_mean)/(1+exp(Trapline4_mean)), 
-         transformed_trapline1 = exp(Trapline1_mean)/(1+exp(Trapline1_mean)), 
+         transformed_trapline4 = exp(Trapline4_mean)/(1+exp(Trapline4_mean)),           ## Bernoulli distribution applied a logit transformation on values, therefore 
+         transformed_trapline1 = exp(Trapline1_mean)/(1+exp(Trapline1_mean)),           ## to get the true values we need to reverse transform the values we calculated
          transformed_trapline2 = exp(Trapline2_mean)/(1+exp(Trapline2_mean)), 
          transformed_trapline3 = exp(Trapline3_mean)/(1+exp(Trapline3_mean)), 
          transformed_trapline5 = exp(Trapline5_mean)/(1+exp(Trapline5_mean)), 
          transformed_trapline7 = exp(Trapline7_mean)/(1+exp(Trapline7_mean)), 
          transformed_trapline8 = exp(Trapline8_mean)/(1+exp(Trapline8_mean))) 
-## 
-comm.comp1_draws_plotting <-  comm.comp1_draws %>% 
-  pivot_longer(cols = starts_with("transformed"), 
-               names_to = "Trapline", 
-               values_to = "infect_prob") %>% 
-  transmute(species = case_when(`.variable` == "b_Intercept" ~ "RBV", 
+```
+## Almost there!
+```
+comm.comp1_draws_plotting <-  comm.comp1_draws %>%                                      
+  pivot_longer(cols = starts_with("transformed"),                                       ## pivot transformed values within the data frame
+               names_to = "Trapline",                                                   ## change column name to Trapline (values in column should be 'trapline1;trapline2...'
+               values_to = "infect_prob") %>%                                           ## change 'value' column name to 'infect_prob'...or whatever you want to call it
+  transmute(species = case_when(`.variable` == "b_Intercept" ~ "RBV",                   ## changing variable names 
                                 `.variable` == "b_Species1" ~ "DM", 
                                 `.variable` == "b_Species3" ~ "WJM"), 
-            trapline = case_when(Trapline == 'transformed_trapline4' ~ "trapline4", 
+            trapline = case_when(Trapline == 'transformed_trapline4' ~ "trapline4",    ## changing variable names in Trapline column 
                                  Trapline == 'transformed_trapline1' ~ "trapline1", 
                                  Trapline == 'transformed_trapline2' ~ "trapline2",
                                  Trapline == 'transformed_trapline3' ~ "trapline3",
                                  Trapline == 'transformed_trapline5' ~ "trapline5",
                                  Trapline == 'transformed_trapline7' ~ "trapline7",
                                  Trapline == 'transformed_trapline8' ~ "trapline8"), 
-            infect_prob = infect_prob, 
+            infect_prob = infect_prob,                                                 ## making new columns
             speciesb = species, 
             traplineb = trapline, 
             chain = `.chain`, 
             iteration = `.iteration`, 
             draw_num = `.draw`) %>% 
-  unite("id",speciesb,traplineb,sep = "_") %>% 
-  mutate(id = factor(id, levels = c("RBV_trapline4","DM_trapline4","WJM_trapline4", 
+  unite("id",speciesb,traplineb,sep = "_") %>%                                         ## merging columns 'speciesb', and 'traplineb' to creat new variable names stored in 
+                                                                                       ## column called 'id'
+ mutate(id = factor(id, levels = c("RBV_trapline4","DM_trapline4","WJM_trapline4",     ## setting factor levels
                                     "RBV_trapline1","DM_trapline1","WJM_trapline1", 
                                     "RBV_trapline2","DM_trapline2","WJM_trapline2", 
                                     "RBV_trapline3","DM_trapline3","WJM_trapline3",
                                     "RBV_trapline5","DM_trapline5","WJM_trapline5",
                                     "RBV_trapline7","DM_trapline7","WJM_trapline7",
                                     "RBV_trapline8","DM_trapline8","WJM_trapline8")))
- ```
+ ``` 
+### You have now created your dataframe that wil be used for plotting!! Congratulations this has been a lot of work. Perhaps time to take a bit of a break, pat your self on   ### the back for getting here, and grab a drink. Next step is plotting, ready whenever you are.  
+#### Quick note the dataframe 'comm.comp1_draws_plotting' will also be used to creat figures 3 & 4
+ 
+### Plotting will be down in ggplot2. For the first plot we will make use of the package 'ggridges' to get a nice look at our posterior distributions. The package 'ggridges'  
+### should be loaded from the beginning. 'ggridges' is a really useful plot for examining posterior draws. 
+### Lets go!
+ ```  
+ ridge_plot2 <- comm.comp1_draws_plotting %>%                       
+  ggplot(aes(infect_prob, trapline, fill = species)) +                                              ## x-axis = infect_prob; y-axis= trapline
+  scale_fill_manual(values = alpha(c("steelblue1","orange1",  "seagreen3"),0.7),                    ## sitting colors for different species, probably want some transparency for                                                                                                     ## overlapping ridges
+                    labels=c("Deer mouse", "Red-backed voles","Woodland jumping mouse")) +          ## labels for species names
+  geom_density_ridges_gradient(scale = 2, rel_min_height = 0.01) +                                  ## scale determines how much overlap will occur between ridges;                                                                                                                 ## rel_min_height refers to the tail cut-off, adjust as necessary
+  theme_bw()+                                                                                       ## choosen theme
+  scale_x_continuous(breaks = seq(0, 1, by = .2))+                                                  ## x-axis numerical limit and break
+  xlab("P(Infection)")+ylab("Habitat type")+                                                        ## axis labels
+  scale_y_discrete(labels = c("Sugar maple hardwood", " Cut-over mixed-wood", "Dense mixed-wood",   ## y-axis tick labels 
+                              "Conifer", "White pine/white spruce", "Black spruce/aspen", 
+                              "White/red pine"))+
+  theme(axis.text=element_text(size=18),                                                            ## size of habitat names (y-axis); numbers (x-axis)
+        axis.title=element_text(size=25,face="bold"),                                               ## size of axis label names
+        legend.position = "bottom",                                                                 ## position of legend
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),                     ## gridlines (or lack thereof) 
+        legend.text=element_text(size=20))+                                                         ## legend text size 
+  guides(fill=guide_legend(title=""));ridge_plot2                                                   ## legend title (or lack thereof) 
+
+pdf(file = "Figure2_ridge_plot2.pdf", height = 14, width=14)                                        ## save file as .pdf
+ridge_plot2                                                                                         ## plot
+dev.off()
+``` 
+### Congrats! 
+
+## Figure 2 [place holder for actually figure number in the manuscript] 
+#### Once again before starting make sure that your model is loaded
+``` 
+prp <- orangemitedata_v3 %>%                                                                ## dataframe that the model was run on 
+  group_by(Species) %>%                                                                     ## group by 'species' variable
+  data_grid(perc_rbv=seq(from = min(orangemitedata_v3$perc_rbv),                            ## make a dataframe that contains the lowest and highester values for x-axis value
+                         to=max(orangemitedata_v3$perc_rbv),                                ## dataframe should contain 101 values (per group - species were grouped in the
+                         length.out = 101))%>%                                              ## previous section of code
+  add_fitted_draws(rbv_pop_model, n=100,                                                    ## Add 100 observations from fitted posterior draws (obtained from the brms model)                                                                                               ## for each perc_rbv value created in the 
+                   re_formula = NA)%>%                                                      ## dateframe above
+  ggplot(aes(x=perc_rbv, color=Species))+                                                   ## begin plotting
+  geom_line(aes(y=.value, group = paste(Species, .draw)), alpha=0.2)+                       ## Draw lines based on the posterior draws for each species 
+  geom_smooth(aes(y=.value, color=Species), se=F, size=1.5)+theme_classic()+                ## Draw a thicker line that shows the means (of draw) value for each species
+  xlab("% red backed vole in community composition")+ylab("P(Infection)")+                  ## axis labels
+  scale_color_manual(labels=c("Red backed vole", "Deer mouse", "Woodland jumping mouse"),   ## manuallt changing color labels
+                     values=c("orange1", "steelblue1", "seagreen3"))+
+  theme(legend.position = "bottom",                                                         ## legend position
+        legend.title = element_blank(),                                                     ## legend title (none)
+        axis.title.x = element_text(size=25),                                               ## x-axis label size
+        axis.text.x = element_text(size=18),                                                ## x-axis text size                                                
+        axis.title.y = element_text(size=25),                                               ## y-axis label size 
+        axis.text.y = element_text(size=18),                                                ## y-axis text size 
+        legend.text = element_text(size=15),                                                ## legend text size 
+        axis.line = element_line(size=1.2))+                                                ## axis line size
+  geom_vline(xintercept = 0.2, color="black", alpha=0.4, size=1); prp                       ## vertical line place on x-axis 
+
+pdf(file = "perc_rbv_pop_model.pdf", height = 10, width=14)                                 ## save file as .pdf
+prp                                                                                         ## plot 
+dev.off()
+``` 
+## Figure 3 
+``` 
+p_rbv <- comm.comp1_draws_plotting[comm.comp1_draws_plotting$species=="RBV",]
+p_dm <- comm.comp1_draws_plotting[comm.comp1_draws_plotting$species=="DM",]
+p_wjm <- comm.comp1_draws_plotting[comm.comp1_draws_plotting$species=="WJM",] 
+p <- left_join(p_rbv, p_dm, by=c("trapline","draw_num")) %>% 
+  left_join(p_wjm, by=c("trapline", "draw_num")) %>% 
+  mutate( 
+    rbv.dm = infect_prob.x - infect_prob.y, 
+    rbv.wjm = infect_prob.x - infect_prob, 
+    dm.wjm = infect_prob.y - infect_prob)
+p_rbvdm <- p[,c(3,21)] %>% 
+  mutate(comparison = "rbv.dm") %>% 
+  rename(infect_prob = rbv.dm)
+p_rbvwjm <- p[,c(3,22)] %>% 
+  mutate(comparison = "rbv.wjm") %>% 
+  rename(infect_prob = rbv.wjm) 
+p_dmwjm <- p[,c(3,23)] %>% 
+  mutate(comparison = "dm.wjm") %>% 
+  rename(infect_prob = dm.wjm) 
+
+
+db_rbvdm <- as.data.frame(t(aggregate(p_rbvdm$infect_prob ~ p_rbvdm$trapline, FUN = function(i)c(median = median(i), HPDinterval = hdi(i)))))%>% 
+  row_to_names(row_number = 1)
+db_rbvwjm <- as.data.frame(t(aggregate(p_rbvwjm$infect_prob ~ p_rbvwjm$trapline, FUN = function(i)c(median = median(i), HPDinterval = hdi(i)))))%>% 
+  row_to_names(row_number = 1)
+db_dmwjm <- as.data.frame(t(aggregate(p_dmwjm$infect_prob ~ p_dmwjm$trapline, FUN = function(i)c(median = median(i), HPDinterval = hdi(i)))))%>% 
+  row_to_names(row_number = 1)
+table1 <- rbind(db_rbvdm, db_rbvwjm, db_dmwjm) 
+write.csv(table1, "table1_commcomp1.csv", row.names = T)
+
+
+p2 <- bind_rows(p_rbvdm,p_rbvwjm,p_dmwjm) %>% 
+  mutate(trapline_proper = case_when((trapline == "trapline1") ~ "Sugar maple hardwood", 
+                                     (trapline == "trapline2") ~ "Cut-over mixed-wood", 
+                                     (trapline == "trapline3") ~ "Dense mixed-wood",
+                                     (trapline == "trapline4") ~ "Conifer",
+                                     (trapline == "trapline5") ~ "White pine/white spruce",
+                                     (trapline == "trapline7") ~ "Black spruce/aspen",
+                                     TRUE ~ "White/red pine")) %>% 
+  mutate(trapline_proper = factor(trapline_proper, levels = c("Sugar maple hardwood", "Cut-over mixed-wood", "Dense mixed-wood",
+                                                              "Conifer", "White pine/white spruce", "Black spruce/aspen", 
+                                                              "White/red pine"))) %>% 
+  mutate(comparison = factor(comparison, levels = c("dm.wjm","rbv.wjm","rbv.dm")))
+
+
+sp_comp <- ggplot(p2, aes(infect_prob, comparison, fill=comparison))+ 
+  geom_vline(xintercept=0, lty=2, color="grey28")+
+  stat_halfeye(interval_colour="red", point_colour="darkred", point_fill="red")+
+  facet_wrap(~trapline_proper, scales = "free_y")+theme_classic()+ 
+  scale_fill_manual(values = c('grey10', 'grey10', 'grey10'),guide=F)+ 
+  xlab("P(Infection)")+ylab("Comparisons")+ 
+  theme(axis.title.x = element_text(size=25), 
+        axis.text.x = element_text(size=18), 
+        axis.title.y = element_text(size=25), 
+        axis.text.y = element_text(size=18),
+        strip.text = element_text(size=20));sp_comp
+  
+pdf(file = "species_comparisons.pdf", height = 10, width=14)
+sp_comp
+dev.off()
