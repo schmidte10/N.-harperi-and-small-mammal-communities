@@ -121,15 +121,16 @@ abund_1 <- rbind(abund,abund_2020) |>
                                     TRUE ~ 900)) |> #place new column next to the 'trapline' column to make sure it worked
   relocate(trapline_group, .after=trapline) |> 
   unite("group_ID", year, month_name, trapline_group, remove = F)
-  
+
 abund_2 <-  abund_1 |> 
-  group_by(group_ID) |> 
+  select(c("group_ID":"species", "tag_left", "year":"month_name")) |>
+  group_by(year) |> 
   distinct(tag_left, .keep_all = T) |>
   ungroup() |>
   reshape2::dcast(group_ID~species, length) |> 
-  select(-c(`TRAP MALFUNCTION`, `TRAP DISTURBANCE`)) |>
+  select(-c(`TRAP MALFUNCTION`, SOREX)) |> #`TRAP DISTURBANCE`
   mutate(total =rowSums(across(-group_ID)), 
-         perc_rbv = RBV/total)
+         perc_rbv = RBV/total) 
 
 #join 'abund_2' dataframe to 'orangemitedata_v3' dataframe by the group_ID column 
 #so that the percentage of voles within a community (per month) can be recorded for each observation
@@ -139,35 +140,44 @@ orangemitedata_v3 <- orangemitedata_v2 |>
          month_name = month.abb[month], 
          trapline_group= as.numeric(as.character(TRAPLINE))*100) |> 
   unite("group_ID", year,month_name,trapline_group, remove=F) |>
-  left_join(abund_2[,c(1,13)], by="group_ID") |> 
+  left_join(abund_2[,c(1,11)], by="group_ID") |> 
   clean_names(case="all_caps") 
 
 orangemitedata_y1y2 <- orangemitedata_v3|> 
   select(c(TRAPLINE, SPECIES, TAG_LEFT,ORANGE_MITES,YEAR,DATE_JULIAN)) |> 
   filter(TRAPLINE != 9) |>
   filter(YEAR ==1 | YEAR ==2) |>
-  mutate(TRAPLINE =factor(TRAPLINE, levels=c('4','1','2','3','5','6','7','8')), 
+  mutate(TRAPLINE =factor(TRAPLINE, levels=c('4','1','2','3','5','7','8')), 
          YEAR =factor(YEAR, levels =c('1','2'))) 
 
 orangemitedata_y3y4 <- orangemitedata_v3|> 
   select(c(TRAPLINE, SPECIES, TAG_LEFT,ORANGE_MITES,YEAR,DATE_JULIAN)) |> 
   filter(TRAPLINE != 9) |> 
   filter(YEAR ==3 | YEAR ==4) |>
-  mutate(TRAPLINE =factor(TRAPLINE, levels=c('4','1','2','3','5','6','7','8')), 
+  mutate(TRAPLINE =factor(TRAPLINE, levels=c('4','1','2','3','5','7','8')), 
          YEAR =factor(YEAR, levels =c('3','4')))  
 ```
 
 # Descriptive statistics 
 
 ```{r}
-
 temp1 <- separate(abund_2, group_ID, c("year","month","trapline.no"))|> 
   filter(year=="2016"|year=="2017")
-summarise_all(temp1[4:14],funs(sum))/sum(temp1[14])
+summarise_all(temp1[4:12],funs(sum))/sum(temp1[12]) 
+
+temp1 |> select("trapline.no","DM","RBV","WJM") |> 
+  mutate(trapline.no =factor(trapline.no)) |>
+  group_by(trapline.no) |> 
+  summarise_each(list(sum))
 
 temp2 <- separate(abund_2, group_ID, c("year","month","trapline.no"))|> 
   filter(year=="2018"|year=="2020")
-summarise_all(temp2[4:14],funs(sum))/sum(temp2[14])
+summarise_all(temp2[4:12],funs(sum))/sum(temp2[12])
+
+temp2 |> select("trapline.no","DM","RBV","WJM") |> 
+  mutate(trapline.no =factor(trapline.no)) |>
+  group_by(trapline.no) |> 
+  summarise_each(list(sum))
 ```
 
 # Data analysis {.tabset}
@@ -267,7 +277,32 @@ comm.comp1.2025 |> emmeans(~ SPECIES | TRAPLINE, type ="response") |> regrid() |
 ### probabilities
 
 ```{r}
-ggpredict(comm.comp1.2025, c("SPECIES","TRAPLINE"))
+comm.comp1.2025 |> emmeans(~SPECIES*TRAPLINE, type ="response")
+
+```
+
+### prob. comparisons 
+
+```{r}
+mtsqst1 <- comm.comp1.2025 |> emmeans(pairwise~SPECIES*TRAPLINE)
+mtsqrt2 <- mtsqst1$contrasts |> gather_emmeans_draws() |> 
+  filter(contrast %in% c(
+    "SPECIES2 TRAPLINE4 - SPECIES1 TRAPLINE4", 
+    "SPECIES2 TRAPLINE4 - SPECIES3 TRAPLINE4", 
+    "SPECIES2 TRAPLINE2 - SPECIES1 TRAPLINE2", 
+    "SPECIES2 TRAPLINE2 - SPECIES3 TRAPLINE2", 
+    "SPECIES2 TRAPLINE3 - SPECIES1 TRAPLINE3", 
+    "SPECIES2 TRAPLINE3 - SPECIES3 TRAPLINE3",
+    "SPECIES2 TRAPLINE5 - SPECIES1 TRAPLINE5", 
+    "SPECIES2 TRAPLINE5 - SPECIES3 TRAPLINE5",
+    "SPECIES2 TRAPLINE7 - SPECIES1 TRAPLINE7", 
+    "SPECIES2 TRAPLINE7 - SPECIES3 TRAPLINE7",
+    "SPECIES2 TRAPLINE8 - SPECIES1 TRAPLINE8", 
+    "SPECIES2 TRAPLINE8 - SPECIES3 TRAPLINE8",
+    "SPECIES2 TRAPLINE1 - SPECIES1 TRAPLINE1", 
+    "SPECIES2 TRAPLINE1 - SPECIES3 TRAPLINE1"
+    ))
+mtsqrt2 %>% group_by(contrast) %>% dplyr::summarise(Prob = sum(.value>0)/n()) 
 ```
 
 
@@ -404,7 +439,7 @@ ridge_plot1 <- comm.comp1_draws_plotting |>
   facet_wrap(~species, labeller = labeller(species = species_labels))+
   theme_bw()+ 
   scale_x_continuous(breaks = seq(0, 1, by = .2))+
-  xlab("P(Infection)")+ylab("Habitat type")+ 
+  xlab("Probability of infection")+ylab("Habitat type")+ 
   scale_y_discrete(limits =c("trapline1",
                              "trapline8",
                              "trapline5",
@@ -427,6 +462,12 @@ ridge_plot1 <- comm.comp1_draws_plotting |>
             
 ```
 
+```{r echo =TRUE, eval =FALSE}
+ggsave("outputs/2025_Community_composition_1.pdf", width =13, height =8, units ="in", dpi =300) 
+ridge_plot1 
+dev.off()
+```
+
 ```{r fig.height=20, fig.width=15, eval=FALSE, echo=TRUE}
 comm.comp1_int_draws2 |>
   pivot_longer(everything(), names_to = 'var', values_to = 'value') |>
@@ -436,6 +477,27 @@ comm.comp1_int_draws2 |>
   facet_wrap(~ var, ncol = 1, scales = 'free_y') + 
   geom_vline(xintercept=0, color="red")
 ```
+
+### summary figure 2
+
+```{r}
+date.plot <- orangemitedata_y1y2 |> 
+  group_by(SPECIES, TRAPLINE) |> 
+  modelr::data_grid(DATE_JULIAN=seq(from=120, 
+                          to=max(orangemitedata_y1y2$DATE_JULIAN), 
+                          length.out=100),
+            YEAR=1) |> 
+  add_fitted_draws(comm.comp1.2025,
+                   n =100,
+                   re_formula=NA) |>  
+  #unite("exp_group", c("region","dev.temp"), remove=FALSE) |> 
+  ggplot(aes(x=DATE_JULIAN, color=SPECIES)) + 
+  geom_line(aes(y=.value, group=paste(SPECIES, .draw)), alpha=0.05) + 
+  geom_smooth(aes(y=.value, color=SPECIES), se=FALSE, size=1.5) + 
+  theme_classic() + 
+  facet_wrap(~TRAPLINE); date.plot
+```
+
 
 ## Low-RBV year 
 
@@ -526,7 +588,29 @@ comm.comp2.2025 |> emmeans(~ SPECIES | TRAPLINE, type ="response") |> regrid() |
 ### probabilities
 
 ```{r}
-ggpredict(comm.comp2.2025, c("SPECIES","TRAPLINE"))
+comm.comp2.2025 |> emmeans(~SPECIES*TRAPLINE, type ="response")
+
+mtsqst1 <- comm.comp2.2025 |> emmeans(pairwise~SPECIES*TRAPLINE)
+mtsqrt2 <- mtsqst1$contrasts |> gather_emmeans_draws() |> 
+  filter(contrast %in% c(
+    "SPECIES2 TRAPLINE4 - SPECIES1 TRAPLINE4", 
+    #"SPECIES2 TRAPLINE4 - SPECIES3 TRAPLINE4", 
+    "SPECIES2 TRAPLINE2 - SPECIES1 TRAPLINE2", 
+    #"SPECIES2 TRAPLINE2 - SPECIES3 TRAPLINE2", 
+    "SPECIES2 TRAPLINE3 - SPECIES1 TRAPLINE3", 
+    #"SPECIES2 TRAPLINE3 - SPECIES3 TRAPLINE3",
+    #"SPECIES2 TRAPLINE5 - SPECIES1 TRAPLINE5", 
+    #"SPECIES2 TRAPLINE5 - SPECIES3 TRAPLINE5",
+    "SPECIES2 TRAPLINE7 - SPECIES1 TRAPLINE7", 
+    #"SPECIES2 TRAPLINE7 - SPECIES3 TRAPLINE7",
+    "SPECIES2 TRAPLINE8 - SPECIES1 TRAPLINE8" 
+    #"SPECIES2 TRAPLINE8 - SPECIES3 TRAPLINE8",
+    #"SPECIES2 TRAPLINE1 - SPECIES1 TRAPLINE1", 
+    #"SPECIES2 TRAPLINE1 - SPECIES3 TRAPLINE1"
+    ))
+mtsqrt2 %>% group_by(contrast) %>% dplyr::summarise(Prob = sum(.value>0)/n())  
+
+
 ```
 
 
@@ -688,6 +772,32 @@ ridge_plot2 <- comm.comp2_draws_plotting %>%
                #alpha = 0.6)
 ```
 
+```{r echo =TRUE, eval =FALSE}
+ggsave("outputs/2025_Community_composition_2.pdf", width =13, height =8, units ="in", dpi =300) 
+ridge_plot2 
+dev.off()
+```
+
+### summary figure 2
+
+```{r}
+date.plot <- orangemitedata_y3y4 |> 
+  group_by(SPECIES, TRAPLINE) |> 
+  modelr::data_grid(DATE_JULIAN=seq(from=120, 
+                          to=max(orangemitedata_y3y4$DATE_JULIAN), 
+                          length.out=100),
+            YEAR=3) |> 
+  add_fitted_draws(comm.comp2.2025,
+                   n =100,
+                   re_formula=NA) |>  
+  #unite("exp_group", c("region","dev.temp"), remove=FALSE) |> 
+  ggplot(aes(x=DATE_JULIAN, color=SPECIES)) + 
+  geom_line(aes(y=.value, group=paste(SPECIES, .draw)), alpha=0.05) + 
+  geom_smooth(aes(y=.value, color=SPECIES), se=FALSE, size=1.5) + 
+  theme_classic() + 
+  facet_wrap(~TRAPLINE); date.plot
+```
+
 
 ## RBV community presence 
 
@@ -781,10 +891,14 @@ rbv.perc.2025 |> bayes_R2(summary =FALSE) |> median_hdci()
 ### post-hoc analysis
 
 ```{r}
+rbv.perc.2025 |> emtrends(var = "PERC_RBV", type = "response") |> regrid() |> summary(by = NULL, adjust = "tukey", infer=TRUE) 
 rbv.perc.2025 |> emtrends(var = "PERC_RBV", type = "response") |> 
   pairs(by = "PERC_RBV") |>
   summary(by = NULL, adjust = "tukey", infer=TRUE) 
+```
 
+```{r}
+rbv.perc.2025 |> emmeans(~SPECIES*PERC_RBV, type = "response")
 rbv.perc.2025 |> emmeans(~SPECIES*PERC_RBV, type = "response") |> 
   pairs(by = "PERC_RBV") |>
   summary(by = NULL, 
@@ -813,7 +927,7 @@ perc_rbv.figure <- orangemitedata_v3 |>
   ggplot(aes(x=PERC_RBV, color=SPECIES))+
   geom_line(aes(y=.linpred, group = paste(SPECIES, .draw)), alpha=0.2)+ 
   geom_smooth(aes(y=.linpred, color=SPECIES), se=F, size=1.5)+theme_classic()+ 
-  xlab("% red backed vole in community composition")+ylab("P(Infection)")+ 
+  xlab("% red backed vole in community composition")+ylab("Probability of infection")+ 
   scale_color_manual(labels=c("Red backed vole", "Deer mouse", "Woodland jumping mouse"), 
                      values=c("#7E4640","#7C8081","#ABA159"))   +
   theme(legend.position = "bottom", 
@@ -828,9 +942,9 @@ perc_rbv.figure <- orangemitedata_v3 |>
 perc_rbv.figure 
 ```
 
-```{r eval=TRUE, echo =FALSE}
-pdf(file = "outputs/perc_rbv_pop_model_2025.pdf", height = 10, width=14)
-perc_rbv.figure
+```{r eval=FALSE, echo =TRUE}
+ggsave("outputs/2025_perc_rbv_pop_model.pdf", width =13, height =8, units ="in", dpi =300) 
+perc_rbv.figure 
 dev.off()
 ```
 
@@ -932,7 +1046,7 @@ body_size_rbv <- (pca_rbv$scores[,1])
 #### Data exploration 
 
 ```{r}
-plot(body_size_rbv ~ avg_weight_sampling_period, 
+plot(avg_weight_sampling_period ~ body_size_rbv, 
      data =rbv)
 ```
 
@@ -1007,6 +1121,13 @@ stan_dens(RBVbodycondition$fit, separate_chains = TRUE)
 summary(RBVbodycondition)
 ```
 
+```{r}
+posteriors <- as.data.frame(RBVbodycondition) 
+covariate_samples <- posteriors |> select(b_Intercept, b_infectionParasitized_Before,b_infectionUninfected_Before) 
+combined_effect <- rowSums(covariate_samples) 
+hdi(combined_effect, credMass =0.95)
+```
+
 ##### R-squared
 
 ```{r}
@@ -1055,6 +1176,212 @@ RBVbodycondition |> conditional_effects(spaghetti = TRUE, ndraws =200)
 
 ```
 
-##
+### Deer mice 
+
+#### Princple component analysis (PCA)
+
+```{r warning=FALSE}
+pca_dm <- princomp(~ avg_hindfoot_summer + avg_skull_length_summer + avg_skull_width_summer,
+                   dm, 
+                   cor = TRUE)
+loadings(pca_dm)
+summary(pca_dm)
+screeplot(pca_dm)
+eigenvals(pca_dm) 
+body_size_dm <- (pca_dm$scores[,1])
+```
+
+#### Data exploration 
+
+```{r}
+plot(avg_weight_sampling_period ~ body_size_dm, 
+     data =dm)
+```
+
+#### Extracting residuals 
+
+```{r}
+bodycond_correlation_dm <- lm(dm$avg_weight_sampling_period ~ body_size_dm)
+dm$bodycondition <- bodycond_correlation_dm$residuals
+hist(dm$bodycondition)
+```
+
+#### priors
+
+```{r eval=FALSE, echo=TRUE, message =FALSE}
+get_DMbodycondition_priors  <- get_prior(bodycondition ~ infection+sex*scale(julian_date)+ (1|tag_left), 
+                      data=dm,
+                      family=gaussian()); get_DMbodycondition_priors 
+```
+
+```{r}
+DMbodycondition_priors <- c(set_prior("normal(0,5)", class ="Intercept"),
+                             set_prior("normal(0,5)", class="b")) 
+```
+
+#### model formula 
+
+```{r}
+DMbodycondition_formula <- bf(bodycondition ~ infection+sex*
+                                 scale(julian_date, center=TRUE, scale=TRUE)+(1|tag_left), 
+                               family =gaussian())
+```
+
+#### Fit model (work in progress)
+
+```{r eval=FALSE, echo=TRUE}
+DMbodycondition <- brm(DMbodycondition_formula, 
+                       data =dm, 
+                       family=bernoulli(), 
+                       prior =DMbodycondition_priors,
+                       iter =2000,
+                       warmup =1000, 
+                       seed=123,
+                       thin=2,
+                       chains = 4,
+                       cores = 2, 
+                       save_pars = save_pars(all = TRUE), 
+                       sample_prior = "yes")
+saveRDS(DMbodycondition, "models/DMbodycondition_2025.RDS")
+```
+
+```{r load-model-4.2, eval=TRUE, echo=FALSE}
+DMbodycondition <- readRDS("C:/Users/jc527762/OneDrive - James Cook University/OrangeMitesSmallMammal/N.-harperi-and-small-mammal-communities/models/DMbodycondition_2025.RDS")
+```
+
+#### model validations (convergence)
+
+```{r}
+stan_trace(DMbodycondition$fit)
+stan_ac(DMbodycondition$fit) 
+stan_rhat(DMbodycondition$fit) 
+stan_ess(DMbodycondition$fit)
+stan_dens(DMbodycondition$fit, separate_chains = TRUE) 
+```
+
+#### model investigation {.tabset}
+
+##### summary
+
+```{r}
+summary(DMbodycondition)
+```
+
+##### R-squared
+
+```{r}
+DMbodycondition |> bayes_R2(summary =FALSE) |> median_hdci()
+```
+
+##### {-}
+
+#### post-hoc analysis
+
+##### Infection
+
+```{r}
+posteriors <- as.data.frame(DMbodycondition) 
+covariate_samples <- posteriors |> select(b_Intercept, b_infectionParasitized_Before,b_infectionUninfected_Before) 
+combined_effect <- rowSums(covariate_samples) 
+hdi(combined_effect, credMass =0.95)
+
+DMbodycondition |> emmeans(~infection, type = "response") 
+DMbodycondition |> emmeans(~infection, type = "response") |> 
+  pairs() |> summary(by = NULL, adjust = "tukey", infer=TRUE) 
+```
+
+##### sex
+
+```{r}
+DMbodycondition |> emmeans(~sex, type = "response")
+DMbodycondition |> emmeans(~sex, type = "response") |> 
+  pairs() |>
+  summary(by = NULL, 
+          adjust = "tukey", 
+          infer=TRUE)  
+```
+
+##### julian date
+
+```{r}
+DMbodycondition |> emtrends(var = "julian_date", type = "response") |> pairs(by='infection') |>
+  summary(by = NULL, adjust = "tukey", infer=TRUE) 
+```
+
+#### partial effects plots 
+
+```{r}
+DMbodycondition |> conditional_effects(spaghetti = TRUE, ndraws =200)
+```
+
+#### summary figure 
+
+##### Red backed voles
+```{r}
+rbv.infect <- as.data.frame(emmeans(RBVbodycondition, ~infection)) 
+
+rbv.infect.obs <- drop_na(rbv, infection) |> 
+  mutate(Pred =predict(RBVbodycondition, re.form =NULL, type ='response'), 
+         Resid =residuals(RBVbodycondition, type ="ordinary"), 
+         Fit =Pred+Resid) 
+```
+
+```{r}
+rbv.bodycondition.plot <- ggplot(data =rbv.infect, aes(x=infection, y=emmean)) + 
+  geom_jitter(data =rbv.infect.obs, aes(x= infection, y =Fit[,1]), 
+              width=0.02,
+              color ="#7E4640", 
+              alpha =0.15) +
+  geom_pointrange(aes(ymin =lower.HPD, 
+                      ymax =upper.HPD), 
+                      color ="black")+ 
+  xlab("") + ylab("Body condition") + 
+  scale_y_continuous(limits =c(-10,10)) +
+  scale_x_discrete(limits =c("Uninfected_Before","Parasitized_Before","Parasitized_After")) +
+  theme_classic() +
+  theme(legend.position = "none", 
+        axis.text.x = element_blank()); rbv.bodycondition.plot
+```
+
+##### Deer mice 
+```{r}
+dm.infect <- as.data.frame(emmeans(DMbodycondition, ~infection)) 
+
+dm.infect.obs <- drop_na(dm, infection) |> 
+  mutate(Pred =predict(DMbodycondition, re.form =NULL, type ='response'), 
+         Resid =residuals(DMbodycondition, type ="ordinary"), 
+         Fit =Pred+Resid) 
+```
+
+```{r}
+dm.bodycondition.plot <- ggplot(data =rbv.infect, aes(x=infection, y=emmean)) + 
+  geom_jitter(data =rbv.infect.obs, aes(x= infection, y =Fit[,1]), 
+              width=0.02,
+              color ="#7C8081", 
+              alpha =0.25) +
+  geom_pointrange(aes(ymin =lower.HPD, 
+                      ymax =upper.HPD), 
+                      color ="black") + 
+  xlab("Infection status") + ylab("Body condition") + 
+  scale_y_continuous(limits =c(-10,10)) +
+  scale_x_discrete(limits =c("Uninfected_Before","Parasitized_Before","Parasitized_After")) +
+  theme_classic() +
+  theme(legend.position = "none"); dm.bodycondition.plot
+```
+
+##### merge plots 
+
+```{r}
+rbv.dm.bodycondition.plot <- (rbv.bodycondition.plot / dm.bodycondition.plot) + plot_annotation(tag_levels = 'A') ; rbv.dm.bodycondition.plot
+```
+
+##### save plot 
+
+```{r eval=FALSE, echo =TRUE}
+ggsave("outputs/2025_bodycondition2.pdf", width =5, height =5, units ="in", dpi =300) 
+rbv.dm.bodycondition.plot 
+dev.off()
+```
+
 
 ## {-}
