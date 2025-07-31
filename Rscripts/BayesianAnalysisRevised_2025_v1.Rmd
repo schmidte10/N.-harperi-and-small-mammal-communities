@@ -1040,7 +1040,7 @@ loadings(pca_rbv)
 summary(pca_rbv)
 screeplot(pca_rbv)
 eigenvals(pca_rbv) 
-body_size_rbv <- (pca_rbv$scores[,1])
+rbv$body_size_rbv <- (pca_rbv$scores[,1])
 ```
 
 #### Data exploration 
@@ -1050,21 +1050,20 @@ plot(avg_weight_sampling_period ~ body_size_rbv,
      data =rbv)
 ```
 
-#### Extracting residuals 
-
+only take first sample collected
 ```{r}
-bodycond_correlation_rbv <- lm(avg_weight_sampling_period ~ body_size_rbv, 
-                               data =rbv)
-rbv$bodycondition <- bodycond_correlation_rbv$residuals
-hist(rbv$bodycondition)
+rbv2 <- rbv |> 
+  group_by(tag_left) |> 
+  summarise(across(everything(), first)) |>
+  ungroup() 
+table(rbv2$infection_stage)
 ```
 
 #### priors
 
 ```{r eval=FALSE, echo=TRUE, message =FALSE}
-get_RBVbodycondition_priors  <- get_prior(bodycondition ~ infection+sex*scale(julian_date)+ (1|tag_left), 
-                      data=rbv,
-                      family=gaussian()); get_RBVbodycondition_priors 
+get_RBVbodycondition_priors  <- get_prior(weight ~ infection_stage+scale(body_size_rbv)+sex*scale(julian_date), 
+                      data=rbv2); get_RBVbodycondition_priors 
 ```
 
 ```{r}
@@ -1075,28 +1074,26 @@ RBVbodycondition_priors <- c(set_prior("normal(0,5)", class ="Intercept"),
 #### model formula 
 
 ```{r}
-RBVbodycondition_formula <- bf(bodycondition ~ infection+sex*
-                                 scale(julian_date, center=TRUE, scale=TRUE)+(1|tag_left), 
-                               family =gaussian())
+RBVbodycondition_formula <- bf(weight ~ infection_stage + scale(body_size_rbv) + sex*scale(julian_date)) 
 ```
 
 #### Fit model (work in progress)
 
 ```{r eval=FALSE, echo=TRUE}
 RBVbodycondition <- brm(RBVbodycondition_formula, 
-                       data =rbv, 
-                       family=bernoulli(), 
+                       data =rbv2, 
+                       family=gaussian(), 
                        prior =RBVbodycondition_priors,
                        iter =2000,
                        warmup =1000, 
                        seed=123,
                        thin=2,
-                       chains = 4,
+                       chains = 3,
                        cores = 2, 
                        save_pars = save_pars(all = TRUE), 
                        sample_prior = "yes", 
                        control = list(adapt_delta=0.99, max_treedepth=15))
-vsaveRDS(RBVbodycondition, "models/RBVbodycondition_2025.RDS")
+saveRDS(RBVbodycondition, "models/RBVbodycondition_2025.RDS")
 ```
 
 ```{r load-model-4.1, eval=TRUE, echo=FALSE}
@@ -1188,7 +1185,7 @@ loadings(pca_dm)
 summary(pca_dm)
 screeplot(pca_dm)
 eigenvals(pca_dm) 
-body_size_dm <- (pca_dm$scores[,1])
+dm$body_size_dm <- (pca_dm$scores[,1])
 ```
 
 #### Data exploration 
@@ -1198,20 +1195,21 @@ plot(avg_weight_sampling_period ~ body_size_dm,
      data =dm)
 ```
 
-#### Extracting residuals 
+only take first sample collected
 
 ```{r}
-bodycond_correlation_dm <- lm(dm$avg_weight_sampling_period ~ body_size_dm)
-dm$bodycondition <- bodycond_correlation_dm$residuals
-hist(dm$bodycondition)
+dm2 <- dm |> 
+  group_by(tag_left) |> 
+  summarise(across(everything(), first)) |>
+  ungroup() 
+table(dm2$infection_stage)
 ```
 
 #### priors
 
 ```{r eval=FALSE, echo=TRUE, message =FALSE}
-get_DMbodycondition_priors  <- get_prior(bodycondition ~ infection+sex*scale(julian_date)+ (1|tag_left), 
-                      data=dm,
-                      family=gaussian()); get_DMbodycondition_priors 
+get_DMbodycondition_priors  <- get_prior(weight ~ infection_stage+scale(body_size_dm)+sex*scale(julian_date), 
+                      data=dm2); get_DMbodycondition_priors 
 ```
 
 ```{r}
@@ -1222,17 +1220,15 @@ DMbodycondition_priors <- c(set_prior("normal(0,5)", class ="Intercept"),
 #### model formula 
 
 ```{r}
-DMbodycondition_formula <- bf(bodycondition ~ infection+sex*
-                                 scale(julian_date, center=TRUE, scale=TRUE)+(1|tag_left), 
-                               family =gaussian())
+DMbodycondition_formula <- bf(weight ~ infection_stage+scale(body_size_dm)+sex*scale(julian_date))
 ```
 
 #### Fit model (work in progress)
 
 ```{r eval=FALSE, echo=TRUE}
 DMbodycondition <- brm(DMbodycondition_formula, 
-                       data =dm, 
-                       family=bernoulli(), 
+                       data =dm2, 
+                       family=gaussian(), 
                        prior =DMbodycondition_priors,
                        iter =2000,
                        warmup =1000, 
