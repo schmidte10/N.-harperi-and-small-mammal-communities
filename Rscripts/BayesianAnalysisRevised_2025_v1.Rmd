@@ -312,7 +312,7 @@ mtsqrt2 %>% group_by(contrast) %>% dplyr::summarise(Prob = sum(.value>0)/n())
 comm.comp1.2025 |> conditional_effects(spaghetti = TRUE, ndraws =200)
 ```
 
-### summary figure 
+### summary figures 
 
 ```{r}
 var <- get_variables(comm.comp1.2025)
